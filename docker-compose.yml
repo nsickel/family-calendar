@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./tokens:/app/tokens
+      - ./.env:/app/.env:ro
+    environment:
+      - TZ=Europe/Berlin
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://api:8000
+    command: npm run dev -- --host
+    depends_on:
+      - api

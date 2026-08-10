@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./tokens:/app/tokens
+      - ./.env:/app/.env:ro
+    environment:
+      - TZ=Europe/Berlin
+    restart: unless-stopped
