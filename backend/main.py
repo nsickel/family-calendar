@@ -6,6 +6,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from auth.basic_auth import BasicAuthMiddleware
+
 load_dotenv()
 
 app = FastAPI(title="Family Calendar")
@@ -13,6 +15,19 @@ app = FastAPI(title="Family Calendar")
 # Explicit redirect URI avoids mismatch when accessed through a proxy (e.g. Vite dev server)
 _APP_URL = os.environ.get("APP_URL", "http://localhost:8000").rstrip("/")
 REDIRECT_URI = f"{_APP_URL}/auth/callback"
+
+# Gate the whole app behind a shared username/password so the calendar isn't
+# publicly viewable once deployed. Fail fast rather than silently serving
+# the app wide open if credentials aren't configured.
+_AUTH_USERNAME = os.environ.get("AUTH_USERNAME")
+_AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD")
+if not _AUTH_USERNAME or not _AUTH_PASSWORD:
+    raise RuntimeError(
+        "AUTH_USERNAME and AUTH_PASSWORD must be set (see .env.example) — "
+        "the app refuses to start without access control configured"
+    )
+
+app.add_middleware(BasicAuthMiddleware, username=_AUTH_USERNAME, password=_AUTH_PASSWORD)
 
 # Mount static files if the React build exists (production)
 static_dir = Path(__file__).parent / "static"
