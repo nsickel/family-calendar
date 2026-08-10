@@ -52,6 +52,10 @@ Fill in:
 - `APP_URL` — must match the redirect URI you registered in Google Cloud
 - `SECRET_KEY` — any random string
 - `TZ` — timezone for the calendar display
+- `AUTH_USERNAME` / `AUTH_PASSWORD` — shared credentials gating access to the
+  whole app (HTTP Basic Auth). The app refuses to start without these set.
+  When deploying to Cloud Run, set them as real secrets (e.g. via Secret
+  Manager or `--set-env-vars`) rather than leaving the placeholder values.
 
 Customize family members in `backend/config.py` (currently placeholder entries).
 
