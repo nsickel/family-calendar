@@ -1,0 +1,11 @@
+.git
+.env
+tokens/*.json
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.egg-info/
+.DS_Store
