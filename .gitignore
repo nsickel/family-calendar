@@ -1,4 +1,6 @@
 .env
+# No longer read by the app (tokens live in Postgres now) — kept ignored
+# since old local dev token files here still contain real refresh tokens.
 tokens/*.json
 __pycache__/
 *.pyc

@@ -53,13 +53,12 @@ variable "google_client_secret" {
   sensitive   = true
 }
 
-variable "auth_username" {
-  description = "Shared HTTP Basic Auth username gating the whole app."
-  type        = string
-}
-
-variable "auth_password" {
-  description = "Shared HTTP Basic Auth password gating the whole app."
+variable "database_url" {
+  description = <<-EOT
+    Postgres connection string for the Supabase project (Session Pooler URI,
+    e.g. postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres).
+    Created manually in the Supabase dashboard — not managed by this Terraform stack.
+  EOT
   type        = string
   sensitive   = true
 }

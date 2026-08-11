@@ -3,11 +3,6 @@ output "service_url" {
   value       = google_cloud_run_v2_service.app.uri
 }
 
-output "tokens_bucket" {
-  description = "GCS bucket backing the /app/tokens mount."
-  value       = google_storage_bucket.tokens.name
-}
-
 output "service_account_email" {
   description = "Cloud Run runtime service account."
   value       = google_service_account.cloud_run.email

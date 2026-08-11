@@ -2,7 +2,6 @@ locals {
   required_apis = [
     "run.googleapis.com",
     "secretmanager.googleapis.com",
-    "storage.googleapis.com",
     "iam.googleapis.com",
   ]
 }

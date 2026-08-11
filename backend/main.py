@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -10,24 +11,24 @@ from auth.basic_auth import BasicAuthMiddleware
 
 load_dotenv()
 
-app = FastAPI(title="Family Calendar")
-
 # Explicit redirect URI avoids mismatch when accessed through a proxy (e.g. Vite dev server)
 _APP_URL = os.environ.get("APP_URL", "http://localhost:8000").rstrip("/")
 REDIRECT_URI = f"{_APP_URL}/auth/callback"
 
-# Gate the whole app behind a shared username/password so the calendar isn't
-# publicly viewable once deployed. Fail fast rather than silently serving
-# the app wide open if credentials aren't configured.
-_AUTH_USERNAME = os.environ.get("AUTH_USERNAME")
-_AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD")
-if not _AUTH_USERNAME or not _AUTH_PASSWORD:
-    raise RuntimeError(
-        "AUTH_USERNAME and AUTH_PASSWORD must be set (see .env.example) — "
-        "the app refuses to start without access control configured"
-    )
 
-app.add_middleware(BasicAuthMiddleware, username=_AUTH_USERNAME, password=_AUTH_PASSWORD)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from auth.family_store import load_cache
+    load_cache()
+    yield
+
+
+app = FastAPI(title="Family Calendar", lifespan=lifespan)
+
+# Gate the whole app behind per-family HTTP Basic Auth, backed by the
+# `families` table (see auth/family_store.py) so the calendar isn't publicly
+# viewable once deployed.
+app.add_middleware(BasicAuthMiddleware)
 
 # Mount static files if the React build exists (production)
 static_dir = Path(__file__).parent / "static"
@@ -44,10 +45,9 @@ async def health():
 
 
 @app.get("/api/week")
-async def week(date: str | None = None):
+async def week(request: Request, date: str | None = None):
     from services.aggregator import get_week_data
     from datetime import date as date_cls, timedelta
-    import datetime
 
     if date:
         week_start = date_cls.fromisoformat(date)
@@ -57,14 +57,20 @@ async def week(date: str | None = None):
         today = date_cls.today()
         week_start = today - timedelta(days=today.weekday())
 
-    return await get_week_data(week_start)
+    return await get_week_data(week_start, request.state.family_id)
 
 
 @app.post("/api/events")
-async def create_event(payload: dict):
+async def create_event(request: Request, payload: dict):
     from googleapiclient.errors import HttpError
     from services.calendar_service import create_event as svc_create
+    from services.family_members import get_member
     from auth.token_store import get_valid_credentials
+
+    member = get_member(payload["account_id"])
+    if member is None or member["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "account not found"}, status_code=404)
+
     creds = get_valid_credentials(payload["account_id"])
     if not creds:
         return JSONResponse({"error": "account not connected"}, status_code=400)
@@ -78,10 +84,16 @@ async def create_event(payload: dict):
 
 
 @app.put("/api/events/{event_id}")
-async def update_event(event_id: str, payload: dict):
+async def update_event(event_id: str, request: Request, payload: dict):
     from googleapiclient.errors import HttpError
     from services.calendar_service import update_event as svc_update
+    from services.family_members import get_member
     from auth.token_store import get_valid_credentials
+
+    member = get_member(payload["account_id"])
+    if member is None or member["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "account not found"}, status_code=404)
+
     creds = get_valid_credentials(payload["account_id"])
     if not creds:
         return JSONResponse({"error": "account not connected"}, status_code=400)
@@ -95,10 +107,16 @@ async def update_event(event_id: str, payload: dict):
 
 
 @app.post("/api/tasks/{task_id}/complete")
-async def complete_task(task_id: str, payload: dict):
+async def complete_task(task_id: str, request: Request, payload: dict):
     from googleapiclient.errors import HttpError
     from services.tasks_service import complete_task as svc_complete
+    from services.family_members import get_member
     from auth.token_store import get_valid_credentials
+
+    member = get_member(payload["account_id"])
+    if member is None or member["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "account not found"}, status_code=404)
+
     creds = get_valid_credentials(payload["account_id"])
     if not creds:
         return JSONResponse({"error": "account not connected"}, status_code=400)
@@ -114,21 +132,27 @@ async def complete_task(task_id: str, payload: dict):
 # Auth routes
 @app.get("/auth/setup", response_class=HTMLResponse)
 async def auth_setup(request: Request):
-    from config import FAMILY_MEMBERS
+    from services.family_members import get_family_members
     from auth.token_store import get_valid_credentials
     members = [
-        {**m, "connected": get_valid_credentials(m["id"]) is not None}
-        for m in FAMILY_MEMBERS
+        {**m, "connected": get_valid_credentials(str(m["id"])) is not None}
+        for m in get_family_members(request.state.family_id)
     ]
     html = _setup_page(members, str(request.base_url))
     return HTMLResponse(html)
 
 
-@app.get("/auth/connect/{account_id}")
-async def auth_connect(account_id: str):
+@app.get("/auth/connect/{slug}")
+async def auth_connect(slug: str, request: Request):
+    from services.family_members import get_member_by_slug
     from auth.oauth import build_flow
     from fastapi.responses import RedirectResponse
-    flow = build_flow(account_id, REDIRECT_URI)
+
+    member = get_member_by_slug(request.state.family_id, slug)
+    if member is None:
+        return JSONResponse({"error": "unknown member"}, status_code=404)
+
+    flow = build_flow(str(member["id"]), REDIRECT_URI)
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -138,10 +162,16 @@ async def auth_connect(account_id: str):
 
 
 @app.get("/auth/callback")
-async def auth_callback(code: str, state: str):
+async def auth_callback(code: str, state: str, request: Request):
+    from services.family_members import get_member
     from auth.oauth import build_flow
     from auth.token_store import save_token
     from fastapi.responses import RedirectResponse
+
+    member = get_member(state)
+    if member is None or member["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "invalid or mismatched account"}, status_code=403)
+
     flow = build_flow(state, REDIRECT_URI)
     flow.fetch_token(code=code)
     save_token(state, flow.credentials)
@@ -162,7 +192,7 @@ def _setup_page(members: list, base_url: str) -> str:
     for m in members:
         status = "✅ Connected" if m["connected"] else "❌ Not connected"
         label = "Reconnect" if m["connected"] else "Connect"
-        btn = f'<a href="/auth/connect/{m["id"]}" style="margin-left:12px;padding:8px 16px;background:#4285F4;color:white;border-radius:8px;text-decoration:none">{label}</a>'
+        btn = f'<a href="/auth/connect/{m["slug"]}" style="margin-left:12px;padding:8px 16px;background:#4285F4;color:white;border-radius:8px;text-decoration:none">{label}</a>'
         rows += f'<tr><td style="padding:12px;font-size:1.5rem">{m["emoji"]}</td><td style="padding:12px;font-weight:700">{m["name"]}</td><td style="padding:12px">{status}{btn}</td></tr>'
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Family Calendar — Auth Setup</title>
@@ -170,7 +200,7 @@ def _setup_page(members: list, base_url: str) -> str:
 table{{border-collapse:collapse;width:100%}}td{{border-bottom:1px solid #eee}}</style>
 </head><body>
 <h1>🗓️ Family Calendar Setup</h1>
-<p>Connect each family member's Google account once. Tokens are stored locally.</p>
+<p>Connect each family member's Google account once. Tokens are stored in Postgres.</p>
 <table>{rows}</table>
 <p style="margin-top:24px"><a href="/">← Back to calendar</a></p>
 </body></html>"""
