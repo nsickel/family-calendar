@@ -70,3 +70,13 @@ docker compose up
 
 Then visit `http://localhost:8000/auth/setup` and connect each family member's
 Google account (must be one of the test users added in step 1.3).
+
+## Deploying to Cloud Run
+
+Infrastructure (Cloud Run service, GCS bucket for OAuth tokens, Secret Manager
+secrets) is provisioned with Terraform in [`infra/`](infra/README.md). Images
+are built and pushed to Docker Hub automatically on push to `main` via
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml);
+deploying a new image to Cloud Run is a separate, deliberate
+`terraform apply -var="image_tag=<sha>"` step — see `infra/README.md` for the
+full walkthrough, including the OAuth redirect URI setup.
