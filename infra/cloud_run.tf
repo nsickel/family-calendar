@@ -61,6 +61,16 @@ resource "google_cloud_run_v2_service" "app" {
           }
         }
       }
+
+      env {
+        name = "SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.secret_key.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
   }
 
@@ -68,11 +78,15 @@ resource "google_cloud_run_v2_service" "app" {
     google_project_service.required,
     google_secret_manager_secret_iam_member.google_client_secret_access,
     google_secret_manager_secret_iam_member.database_url_access,
+    google_secret_manager_secret_iam_member.secret_key_access,
   ]
 }
 
-# App gates itself with HTTP Basic Auth, so Cloud Run's own IAM layer is left
-# open — allUsers may invoke, the app's basic_auth middleware is the real gate.
+# App gates /api/* and the Google-connect flow behind a signed session
+# cookie, so Cloud Run's own IAM layer is left open — allUsers may invoke,
+# the app's session_auth middleware is the real gate. The public SPA shell
+# (/, /assets/*) intentionally has no auth gate: it contains no secrets and
+# must be reachable so the login page itself can render.
 resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
   project  = google_cloud_run_v2_service.app.project
   location = google_cloud_run_v2_service.app.location

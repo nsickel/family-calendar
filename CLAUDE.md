@@ -42,11 +42,14 @@ docker compose exec api python -m scripts.create_family \
   --member "nils:Nils:👨:#4ECDC4" \
   --member "emelie:Emelie:👧:#FF6B9D"
 ```
-Then log in at `/auth/setup` with those credentials and connect each family
-member's Google account (per-member OAuth tokens land in the `oauth_tokens`
-table).
+Then log in at the app's login page with those credentials, visit
+`/auth/setup`, and connect each family member's Google account (per-member
+OAuth tokens land in the `oauth_tokens` table).
 
 There's no public self-service signup — `create_family.py` (admin-run, once
-per new family) is the only way to provision a family. Login is per-family
-HTTP Basic Auth backed by the `families` table, not a single shared
-`AUTH_USERNAME`/`AUTH_PASSWORD` env var.
+per new family) is the only way to provision a family. Login is per-family,
+backed by the `families` table, not a single shared
+`AUTH_USERNAME`/`AUTH_PASSWORD` env var — `POST /auth/login` verifies the
+bcrypt-hashed password and issues a signed, httpOnly session cookie (see
+`backend/auth/session_cookie.py`); there's no browser-native Basic Auth
+popup anymore.

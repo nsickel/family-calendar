@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import WeekGrid from "./components/WeekGrid";
 import WeekNav from "./components/WeekNav";
 import AddEventModal from "./components/AddEventModal";
 import MemberBadge from "./components/MemberBadge";
+import LoginPage from "./components/LoginPage";
+import { setUnauthorizedHandler } from "./api";
 import { useWeekData } from "./hooks/useWeekData";
 import type { CalendarEvent } from "./types";
 
 export default function App() {
+  const [needsLogin, setNeedsLogin] = useState(false);
+  useEffect(() => {
+    setUnauthorizedHandler(() => setNeedsLogin(true));
+  }, []);
+
   const { data, loading, error, monday, goNextWeek, goPrevWeek, goToday, refresh } = useWeekData();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
   const [editEvent, setEditEvent] = useState<CalendarEvent | undefined>();
+
+  if (needsLogin) return <LoginPage />;
 
   const openAdd = (date: string) => {
     setEditEvent(undefined);

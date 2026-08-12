@@ -20,6 +20,28 @@ resource "google_secret_manager_secret_iam_member" "google_client_secret_access"
   member    = "serviceAccount:${google_service_account.cloud_run.email}"
 }
 
+resource "google_secret_manager_secret" "secret_key" {
+  project   = var.project_id
+  secret_id = "${var.service_name}-secret-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_secret_manager_secret_version" "secret_key" {
+  secret      = google_secret_manager_secret.secret_key.id
+  secret_data = var.secret_key
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_key_access" {
+  secret_id = google_secret_manager_secret.secret_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_run.email}"
+}
+
 resource "google_secret_manager_secret" "database_url" {
   project   = var.project_id
   secret_id = "${var.service_name}-database-url"

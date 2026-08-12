@@ -1,3 +1,5 @@
+import { logout } from "../api";
+
 interface Props {
   monday: string;
   loading: boolean;
@@ -8,6 +10,11 @@ interface Props {
 }
 
 export default function WeekNav({ monday, loading, onPrev, onNext, onToday, onRefresh }: Props) {
+  const handleLogout = async () => {
+    await logout();
+    window.location.reload();
+  };
+
   const d = new Date(monday);
   const end = new Date(monday);
   end.setDate(end.getDate() + 6);
@@ -52,6 +59,13 @@ export default function WeekNav({ monday, loading, onPrev, onNext, onToday, onRe
           title="Refresh"
         >
           ↻
+        </button>
+        <button
+          onClick={handleLogout}
+          className="w-8 h-8 rounded-xl text-gray-300 text-sm flex items-center justify-center active:bg-gray-100"
+          title="Log out"
+        >
+          ⏻
         </button>
       </div>
     </div>

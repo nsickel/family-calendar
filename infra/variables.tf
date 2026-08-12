@@ -53,6 +53,12 @@ variable "google_client_secret" {
   sensitive   = true
 }
 
+variable "secret_key" {
+  description = "Random secret used to sign session cookies (auth/session_cookie.py). Generate with e.g. `openssl rand -hex 32`."
+  type        = string
+  sensitive   = true
+}
+
 variable "database_url" {
   description = <<-EOT
     Postgres connection string for the Supabase project (Session Pooler URI,

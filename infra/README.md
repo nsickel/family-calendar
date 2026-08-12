@@ -11,13 +11,19 @@ Terraform for deploying family-calendar to Cloud Run. Provisions:
   per-family login credentials) lives there now, not on any Cloud Run-managed
   volume.
 - A Secret Manager secret for `GOOGLE_CLIENT_SECRET`.
+- A Secret Manager secret for `SECRET_KEY`, used to sign session cookies.
 - A dedicated least-privilege service account for the Cloud Run service
   (secret access only, nothing else).
 
 Cloud Run's own IAM stays open (`allUsers` can invoke) — the app gates itself
-with per-family HTTP Basic Auth, backed by the `families` table in Postgres
-(no more shared `AUTH_USERNAME`/`AUTH_PASSWORD`), same as it already does
-locally.
+with a signed, httpOnly session cookie issued on login (`POST /auth/login`),
+checked against the `families` table in Postgres (no more shared
+`AUTH_USERNAME`/`AUTH_PASSWORD`, and no more browser-native Basic Auth
+popup), same as it already does locally. The public SPA shell (`/`,
+`/assets/*`) is intentionally reachable without a session so the login page
+can render — it contains no secrets. `/api/*` and the Google-connect flow
+(`/auth/setup`, `/auth/connect/*`, `/auth/callback`) still require a valid
+session.
 
 Deploys are manual and pinned by design: there's no default for `image_tag`,
 so every rollout is `terraform apply -var="image_tag=<git-short-sha>"` with a
@@ -50,6 +56,7 @@ project_id            = "your-gcp-project-id"
 image_tag              = "abc1234"   # a git short SHA that was pushed to Docker Hub
 google_client_id       = "....apps.googleusercontent.com"
 google_client_secret   = "...."
+secret_key             = "...."      # random value signing session cookies, e.g. `openssl rand -hex 32`
 database_url           = "postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres"
 ```
 
@@ -92,5 +99,8 @@ terraform apply -var="image_tag=<new-git-short-sha>"
 ### Verifying
 
 - `terraform fmt -check && terraform validate` for static correctness.
-- `curl https://<service_url>/health` → `{"status":"ok"}` (exempt from Basic Auth).
-- `curl https://<service_url>/` → `401` until Basic Auth credentials are supplied.
+- `curl https://<service_url>/health` → `{"status":"ok"}` (always exempt).
+- `curl https://<service_url>/` → `200` — the SPA shell (including the login
+  page) is intentionally public.
+- `curl https://<service_url>/api/week` → `401` until a valid session cookie
+  is supplied (obtained via `POST /auth/login`).

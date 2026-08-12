@@ -1,34 +1,28 @@
 import os
-from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from auth.basic_auth import BasicAuthMiddleware
-
-load_dotenv()
+from auth.session_auth import SessionAuthMiddleware
 
 # Explicit redirect URI avoids mismatch when accessed through a proxy (e.g. Vite dev server)
 _APP_URL = os.environ.get("APP_URL", "http://localhost:8000").rstrip("/")
 REDIRECT_URI = f"{_APP_URL}/auth/callback"
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    from auth.family_store import load_cache
-    load_cache()
-    yield
+app = FastAPI(title="Family Calendar")
 
-
-app = FastAPI(title="Family Calendar", lifespan=lifespan)
-
-# Gate the whole app behind per-family HTTP Basic Auth, backed by the
-# `families` table (see auth/family_store.py) so the calendar isn't publicly
-# viewable once deployed.
-app.add_middleware(BasicAuthMiddleware)
+# Gate /api/* and /auth/* (except login/logout) behind a signed session
+# cookie, backed by the `families` table (see auth/family_store.py) so the
+# calendar isn't publicly viewable once deployed. The SPA shell itself
+# (`/`, `/assets/*`) stays public so the login page can render.
+app.add_middleware(SessionAuthMiddleware)
 
 # Mount static files if the React build exists (production)
 static_dir = Path(__file__).parent / "static"
@@ -130,6 +124,55 @@ async def complete_task(task_id: str, request: Request, payload: dict):
 
 
 # Auth routes
+@app.post("/auth/login")
+async def login(payload: dict):
+    from auth.family_store import get_family_by_username
+    from auth.hashing import verify_password
+    from auth.rate_limit import is_locked_out, record_failure, record_success
+    from auth.session_cookie import (
+        SESSION_COOKIE_NAME,
+        SESSION_MAX_AGE_SECONDS,
+        create_session_token,
+    )
+
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+
+    locked, retry_after = is_locked_out(username)
+    if locked:
+        return JSONResponse(
+            {"error": "too many failed attempts", "retry_after": retry_after},
+            status_code=429,
+        )
+
+    family = get_family_by_username(username)
+    if family is None or not verify_password(password, family["password_hash"]):
+        record_failure(username)
+        return JSONResponse({"error": "invalid username or password"}, status_code=401)
+
+    record_success(username)
+    resp = JSONResponse({"status": "ok"})
+    resp.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=create_session_token(family["family_id"]),
+        max_age=SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=_APP_URL.startswith("https://"),
+        samesite="lax",
+        path="/",
+    )
+    return resp
+
+
+@app.post("/auth/logout")
+async def logout():
+    from auth.session_cookie import SESSION_COOKIE_NAME
+
+    resp = JSONResponse({"status": "ok"})
+    resp.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    return resp
+
+
 @app.get("/auth/setup", response_class=HTMLResponse)
 async def auth_setup(request: Request):
     from services.family_members import get_family_members
