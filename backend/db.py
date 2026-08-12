@@ -13,6 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
 engine = create_engine(
     DATABASE_URL,
@@ -20,6 +21,7 @@ engine = create_engine(
     max_overflow=2,
     pool_pre_ping=True,
     pool_recycle=1800,
+    connect_args={"sslmode": DB_SSLMODE},
 )
 
 metadata = MetaData()

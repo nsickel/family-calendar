@@ -8,6 +8,7 @@ services:
     environment:
       - TZ=Europe/Berlin
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/family_calendar
+      - DB_SSLMODE=disable
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:
