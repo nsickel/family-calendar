@@ -6,8 +6,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./tokens:/app/tokens
       - ./.env:/app/.env:ro
     environment:
       - TZ=Europe/Berlin
+      # DATABASE_URL comes from the mounted .env file (point it at your own
+      # Postgres instance, e.g. a local one or Supabase)
     restart: unless-stopped

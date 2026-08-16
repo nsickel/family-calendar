@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import date, timedelta
-from config import FAMILY_MEMBERS
+from services.family_members import get_family_members
 from auth.token_store import get_valid_credentials
 from services.calendar_service import get_events
 from services.tasks_service import get_tasks
@@ -9,13 +9,13 @@ from services.tasks_service import get_tasks
 logger = logging.getLogger(__name__)
 
 
-async def get_week_data(week_start: date) -> dict:
+async def get_week_data(week_start: date, family_id) -> dict:
     week_end = week_start + timedelta(days=6)
 
     # Build connected member list
     member_status = []
-    for m in FAMILY_MEMBERS:
-        creds = get_valid_credentials(m["id"])
+    for m in get_family_members(family_id):
+        creds = get_valid_credentials(str(m["id"]))
         member_status.append({**m, "connected": creds is not None, "_creds": creds})
 
     # Fetch all events and tasks in parallel

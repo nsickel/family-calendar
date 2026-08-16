@@ -1,46 +1,68 @@
-import json
-import os
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
+from db import engine, oauth_tokens_table
 
-TOKENS_DIR = Path(os.environ.get("TOKENS_DIR", "/app/tokens"))
-
-
-def _token_path(account_id: str) -> Path:
-    return TOKENS_DIR / f"{account_id}.json"
+_UPSERT_COLUMNS = (
+    "access_token",
+    "refresh_token",
+    "token_uri",
+    "client_id",
+    "client_secret",
+    "scopes",
+    "expiry",
+    "updated_at",
+)
 
 
 def save_token(account_id: str, credentials: Credentials) -> None:
-    TOKENS_DIR.mkdir(parents=True, exist_ok=True)
-    data = {
-        "token": credentials.token,
-        "refresh_token": credentials.refresh_token,
-        "token_uri": credentials.token_uri,
-        "client_id": credentials.client_id,
-        "client_secret": credentials.client_secret,
-        "scopes": list(credentials.scopes or []),
-        "expiry": credentials.expiry.isoformat() if credentials.expiry else None,
-    }
-    _token_path(account_id).write_text(json.dumps(data))
+    expiry = credentials.expiry
+    if expiry is not None and expiry.tzinfo is None:
+        # google-auth's Credentials.expiry is naive UTC (see google.auth._helpers.utcnow);
+        # attach tzinfo explicitly so it isn't misread as the DB session's local time.
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    stmt = pg_insert(oauth_tokens_table).values(
+        account_id=account_id,
+        access_token=credentials.token,
+        refresh_token=credentials.refresh_token,
+        token_uri=credentials.token_uri,
+        client_id=credentials.client_id,
+        client_secret=credentials.client_secret,
+        scopes=list(credentials.scopes or []),
+        expiry=expiry,
+        updated_at=datetime.now(timezone.utc),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["account_id"],
+        set_={col: stmt.excluded[col] for col in _UPSERT_COLUMNS},
+    )
+    with engine.begin() as conn:
+        conn.execute(stmt)
 
 
 def load_token(account_id: str) -> Credentials | None:
-    path = _token_path(account_id)
-    if not path.exists():
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(oauth_tokens_table).where(oauth_tokens_table.c.account_id == account_id)
+        ).mappings().first()
+    if row is None:
         return None
-    data = json.loads(path.read_text())
-    expiry = data.get("expiry")
+    expiry = row["expiry"]
+    if expiry is not None and expiry.tzinfo is not None:
+        # google-auth compares Credentials.expiry against a naive UTC "now"
+        # (see google.auth._helpers.utcnow), so strip the tzinfo Postgres adds back.
+        expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
     return Credentials(
-        token=data.get("token"),
-        refresh_token=data.get("refresh_token"),
-        token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
-        client_id=data.get("client_id"),
-        client_secret=data.get("client_secret"),
-        scopes=data.get("scopes"),
-        expiry=datetime.fromisoformat(expiry) if expiry else None,
+        token=row["access_token"],
+        refresh_token=row["refresh_token"],
+        token_uri=row["token_uri"],
+        client_id=row["client_id"],
+        client_secret=row["client_secret"],
+        scopes=row["scopes"],
+        expiry=expiry,
     )
 
 
