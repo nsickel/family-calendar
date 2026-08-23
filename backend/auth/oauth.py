@@ -2,6 +2,14 @@ import os
 from google_auth_oauthlib.flow import Flow
 from config import GOOGLE_SCOPES
 
+# Members who previously connected still have the now-removed `tasks` scope
+# on their Google grant; since /auth/connect uses include_granted_scopes,
+# Google echoes that extra scope back on reconnect even though we only ask
+# for `calendar`. oauthlib treats any scope mismatch as a hard error unless
+# told to relax — this is the documented fix (not a security bypass, just
+# stops oauthlib from rejecting a superset of the requested scope).
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 
 def build_flow(account_id: str, redirect_uri: str) -> Flow:
     client_config = {

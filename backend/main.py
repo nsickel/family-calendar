@@ -100,27 +100,114 @@ async def update_event(event_id: str, request: Request, payload: dict):
         )
 
 
+_VALID_RECURRENCE = {"none", "daily", "weekdays", "weekly"}
+
+
+def _validate_task_payload(payload: dict, family_id):
+    from services.family_members import get_member
+
+    title = (payload.get("title") or "").strip()
+    start_date = payload.get("start_date")
+    assignee_ids = payload.get("assignee_ids") or []
+    recurrence = payload.get("recurrence") or "none"
+
+    if not title or not start_date or not assignee_ids:
+        return None, JSONResponse(
+            {"error": "title, start_date and at least one assignee are required"}, status_code=400
+        )
+    if recurrence not in _VALID_RECURRENCE:
+        return None, JSONResponse({"error": "invalid recurrence"}, status_code=400)
+    for mid in assignee_ids:
+        member = get_member(mid)
+        if member is None or member["family_id"] != family_id:
+            return None, JSONResponse({"error": f"unknown assignee {mid}"}, status_code=404)
+
+    return {
+        "title": title,
+        "start_date": start_date,
+        "start_time": payload.get("start_time") or None,
+        "recurrence": None if recurrence == "none" else recurrence,
+        "assignee_ids": assignee_ids,
+    }, None
+
+
+@app.post("/api/tasks")
+async def create_task(request: Request, payload: dict):
+    from datetime import date as date_cls
+    from services.task_store import create_task as store_create, get_task_with_assignees
+    from services.task_sync import sync_task_assignees
+
+    parsed, error = _validate_task_payload(payload, request.state.family_id)
+    if error:
+        return error
+
+    task = store_create(
+        family_id=request.state.family_id,
+        title=parsed["title"],
+        start_date=date_cls.fromisoformat(parsed["start_date"]),
+        start_time=parsed["start_time"],
+        recurrence=parsed["recurrence"],
+        member_ids=parsed["assignee_ids"],
+    )
+    await sync_task_assignees(task, set(parsed["assignee_ids"]))
+    return get_task_with_assignees(task["id"])
+
+
+@app.put("/api/tasks/{task_id}")
+async def update_task(task_id: str, request: Request, payload: dict):
+    from datetime import date as date_cls
+    from services.task_store import get_task, update_task as store_update, set_task_assignees, get_task_with_assignees
+    from services.task_sync import sync_task_assignees
+
+    existing = get_task(task_id)
+    if existing is None or existing["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "task not found"}, status_code=404)
+
+    parsed, error = _validate_task_payload(payload, request.state.family_id)
+    if error:
+        return error
+
+    task = store_update(
+        task_id,
+        title=parsed["title"],
+        start_date=date_cls.fromisoformat(parsed["start_date"]),
+        start_time=parsed["start_time"],
+        recurrence=parsed["recurrence"],
+    )
+    set_task_assignees(task_id, parsed["assignee_ids"])
+    await sync_task_assignees(task, set(parsed["assignee_ids"]))
+    return get_task_with_assignees(task_id)
+
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: str, request: Request):
+    from services.task_store import get_task, delete_task as store_delete
+    from services.task_sync import delete_task_calendar_events
+
+    existing = get_task(task_id)
+    if existing is None or existing["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "task not found"}, status_code=404)
+
+    await delete_task_calendar_events(task_id)
+    store_delete(task_id)
+    return {"status": "ok"}
+
+
 @app.post("/api/tasks/{task_id}/complete")
 async def complete_task(task_id: str, request: Request, payload: dict):
-    from googleapiclient.errors import HttpError
-    from services.tasks_service import complete_task as svc_complete
-    from services.family_members import get_member
-    from auth.token_store import get_valid_credentials
+    from datetime import date as date_cls
+    from services.task_store import get_task, mark_occurrence_complete
 
-    member = get_member(payload["account_id"])
-    if member is None or member["family_id"] != request.state.family_id:
-        return JSONResponse({"error": "account not found"}, status_code=404)
+    task = get_task(task_id)
+    if task is None or task["family_id"] != request.state.family_id:
+        return JSONResponse({"error": "task not found"}, status_code=404)
 
-    creds = get_valid_credentials(payload["account_id"])
-    if not creds:
-        return JSONResponse({"error": "account not connected"}, status_code=400)
-    try:
-        return await svc_complete(creds, payload["tasklist_id"], task_id)
-    except HttpError:
-        return JSONResponse(
-            {"error": "Google rejected the request — try reconnecting this account at /auth/setup"},
-            status_code=502,
-        )
+    occurrence_date = payload.get("occurrence_date")
+    if not occurrence_date:
+        return JSONResponse({"error": "occurrence_date is required"}, status_code=400)
+
+    mark_occurrence_complete(task_id, date_cls.fromisoformat(occurrence_date))
+    return {"status": "ok"}
 
 
 # Auth routes

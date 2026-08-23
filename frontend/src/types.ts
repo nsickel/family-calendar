@@ -20,16 +20,32 @@ export interface CalendarEvent {
   source: "calendar";
 }
 
-export interface Task {
+export interface TaskAssignee {
   id: string;
-  tasklist_id: string;
-  account_id: string;
-  title: string;
+  name: string;
   emoji: string;
   color: string;
-  completed: boolean;
-  due: string | null;
-  source: "tasks";
+}
+
+export type TaskRecurrence = "none" | "daily" | "weekdays" | "weekly";
+
+export interface Task {
+  id: string;
+  title: string;
+  start_date: string;
+  occurrence_date: string;
+  start_time: string | null;
+  recurrence: TaskRecurrence;
+  assignees: TaskAssignee[];
+  source: "local";
+}
+
+export interface NewTaskPayload {
+  title: string;
+  start_date: string;
+  start_time?: string | null;
+  recurrence: TaskRecurrence;
+  assignee_ids: string[];
 }
 
 export interface DayData {

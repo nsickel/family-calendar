@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import EventPill from "./EventPill";
 import TaskItem from "./TaskItem";
-import type { DayData, CalendarEvent } from "../types";
+import type { DayData, CalendarEvent, Task } from "../types";
 
 interface Props {
   day: DayData;
   onAddEvent: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
+  onAddTask: (date: string) => void;
+  onEditTask: (task: Task) => void;
 }
 
-export default function DayColumn({ day, onAddEvent, onEditEvent }: Props) {
+export default function DayColumn({ day, onAddEvent, onEditEvent, onAddTask, onEditTask }: Props) {
   const [tasks, setTasks] = useState(day.tasks);
+
+  useEffect(() => setTasks(day.tasks), [day.tasks]);
 
   const removeTask = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id));
 
@@ -54,16 +58,26 @@ export default function DayColumn({ day, onAddEvent, onEditEvent }: Props) {
       </div>
 
       {/* Tasks */}
-      {tasks.length > 0 && (
-        <div
-          className="border-t border-dashed border-gray-200 mt-1 pt-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {tasks.map((t) => (
-            <TaskItem key={t.id} task={t} onCompleted={removeTask} />
-          ))}
+      <div
+        className="border-t border-dashed border-gray-200 mt-1 pt-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Tasks</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddTask(day.date);
+            }}
+            className="text-xs font-black text-indigo-400 active:text-indigo-600 px-1"
+          >
+            + Task
+          </button>
         </div>
-      )}
+        {tasks.map((t) => (
+          <TaskItem key={t.id} task={t} onCompleted={removeTask} onEdit={onEditTask} />
+        ))}
+      </div>
     </motion.div>
   );
 }

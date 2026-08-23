@@ -3,11 +3,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import WeekGrid from "./components/WeekGrid";
 import WeekNav from "./components/WeekNav";
 import AddEventModal from "./components/AddEventModal";
+import TaskEditorModal from "./components/TaskEditorModal";
 import MemberBadge from "./components/MemberBadge";
 import LoginPage from "./components/LoginPage";
 import { setUnauthorizedHandler } from "./api";
 import { useWeekData } from "./hooks/useWeekData";
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent, Task } from "./types";
 
 export default function App() {
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -21,6 +22,10 @@ export default function App() {
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
   const [editEvent, setEditEvent] = useState<CalendarEvent | undefined>();
 
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskPrefillDate, setTaskPrefillDate] = useState<string | undefined>();
+  const [editTask, setEditTask] = useState<Task | undefined>();
+
   if (needsLogin) return <LoginPage />;
 
   const openAdd = (date: string) => {
@@ -33,6 +38,18 @@ export default function App() {
     setEditEvent(event);
     setPrefillDate(undefined);
     setModalOpen(true);
+  };
+
+  const openAddTask = (date: string) => {
+    setEditTask(undefined);
+    setTaskPrefillDate(date);
+    setTaskModalOpen(true);
+  };
+
+  const openEditTask = (task: Task) => {
+    setEditTask(task);
+    setTaskPrefillDate(undefined);
+    setTaskModalOpen(true);
   };
 
   const handleSaved = () => {
@@ -102,7 +119,13 @@ export default function App() {
               transition={{ duration: 0.15 }}
               className="h-full"
             >
-              <WeekGrid data={data} onAddEvent={openAdd} onEditEvent={openEdit} />
+              <WeekGrid
+                data={data}
+                onAddEvent={openAdd}
+                onEditEvent={openEdit}
+                onAddTask={openAddTask}
+                onEditTask={openEditTask}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -124,6 +147,16 @@ export default function App() {
         editEvent={editEvent}
         members={data?.members ?? []}
         onClose={() => setModalOpen(false)}
+        onSaved={handleSaved}
+      />
+
+      {/* Add/Edit Task Modal */}
+      <TaskEditorModal
+        isOpen={taskModalOpen}
+        prefillDate={taskPrefillDate}
+        editTask={editTask}
+        members={data?.members ?? []}
+        onClose={() => setTaskModalOpen(false)}
         onSaved={handleSaved}
       />
     </div>

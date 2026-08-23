@@ -6,8 +6,11 @@ from sqlalchemy import (
     Column,
     Text,
     Integer,
+    Date,
     ForeignKey,
     TIMESTAMP,
+    CheckConstraint,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
@@ -61,4 +64,48 @@ oauth_tokens_table = Table(
     Column("scopes", ARRAY(Text)),
     Column("expiry", TIMESTAMP(timezone=True)),
     Column("updated_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+)
+
+tasks_table = Table(
+    "tasks",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()),
+    Column("family_id", UUID(as_uuid=True), ForeignKey("families.id", ondelete="CASCADE"), nullable=False),
+    Column("title", Text, nullable=False),
+    Column("start_date", Date, nullable=False),
+    Column("start_time", Text),
+    Column("recurrence", Text),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("recurrence IN ('daily', 'weekdays', 'weekly')", name="ck_tasks_recurrence"),
+)
+
+task_assignees_table = Table(
+    "task_assignees",
+    metadata,
+    Column("task_id", UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True),
+    Column("member_id", UUID(as_uuid=True), ForeignKey("family_members.id", ondelete="CASCADE"), primary_key=True),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+)
+
+task_calendar_links_table = Table(
+    "task_calendar_links",
+    metadata,
+    Column("task_id", UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True),
+    Column("member_id", UUID(as_uuid=True), ForeignKey("family_members.id", ondelete="CASCADE"), primary_key=True),
+    Column("google_event_id", Text, nullable=False),
+    Column("calendar_id", Text, nullable=False, server_default="primary"),
+    Column("created_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+)
+
+task_completions_table = Table(
+    "task_completions",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
+    Column("occurrence_date", Date, nullable=False),
+    Column("completed_by", UUID(as_uuid=True), ForeignKey("family_members.id", ondelete="SET NULL")),
+    Column("completed_at", TIMESTAMP(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint("task_id", "occurrence_date", name="uq_task_completions_task_occurrence"),
 )
