@@ -1,4 +1,4 @@
-import type { WeekData, NewEventPayload } from "./types";
+import type { WeekData, NewEventPayload, NewTaskPayload } from "./types";
 
 const BASE = "";
 
@@ -42,11 +42,34 @@ export async function updateEvent(eventId: string, payload: Partial<NewEventPayl
   if (!res.ok) throw new Error(`Failed to update event: ${res.status}`);
 }
 
-export async function completeTask(taskId: string, accountId: string, tasklistId: string): Promise<void> {
+export async function createTask(payload: NewTaskPayload): Promise<void> {
+  const res = await apiFetch(BASE + "/api/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to create task: ${res.status}`);
+}
+
+export async function updateTask(taskId: string, payload: NewTaskPayload): Promise<void> {
+  const res = await apiFetch(BASE + `/api/tasks/${taskId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to update task: ${res.status}`);
+}
+
+export async function deleteTask(taskId: string): Promise<void> {
+  const res = await apiFetch(BASE + `/api/tasks/${taskId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Failed to delete task: ${res.status}`);
+}
+
+export async function completeTask(taskId: string, occurrenceDate: string): Promise<void> {
   const res = await apiFetch(BASE + `/api/tasks/${taskId}/complete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account_id: accountId, tasklist_id: tasklistId }),
+    body: JSON.stringify({ occurrence_date: occurrenceDate }),
   });
   if (!res.ok) throw new Error(`Failed to complete task: ${res.status}`);
 }

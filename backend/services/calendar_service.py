@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, date, timezone
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 
 
@@ -75,6 +76,8 @@ async def create_event(credentials: Credentials, payload: dict) -> dict:
         else:
             body["start"] = {"dateTime": f"{payload['date']}T{payload['start_time']}:00", "timeZone": "Europe/Berlin"}
             body["end"] = {"dateTime": f"{payload['date']}T{payload['end_time']}:00", "timeZone": "Europe/Berlin"}
+        if payload.get("recurrence"):
+            body["recurrence"] = [payload["recurrence"]]
         return service.events().insert(calendarId="primary", body=body).execute()
 
     return await asyncio.get_event_loop().run_in_executor(None, _create)
@@ -86,9 +89,26 @@ async def update_event(credentials: Credentials, event_id: str, payload: dict) -
         existing = service.events().get(calendarId="primary", eventId=event_id).execute()
         if "title" in payload:
             existing["summary"] = payload["title"]
-        if "start_time" in payload:
+        if payload.get("all_day"):
+            existing["start"] = {"date": payload["date"]}
+            existing["end"] = {"date": payload.get("end_date", payload["date"])}
+        elif "start_time" in payload:
             existing["start"] = {"dateTime": f"{payload['date']}T{payload['start_time']}:00", "timeZone": "Europe/Berlin"}
             existing["end"] = {"dateTime": f"{payload['date']}T{payload['end_time']}:00", "timeZone": "Europe/Berlin"}
+        if "recurrence" in payload:
+            existing["recurrence"] = [payload["recurrence"]] if payload["recurrence"] else []
         return service.events().update(calendarId="primary", eventId=event_id, body=existing).execute()
 
     return await asyncio.get_event_loop().run_in_executor(None, _update)
+
+
+async def delete_event(credentials: Credentials, event_id: str) -> None:
+    def _delete():
+        service = _build_service(credentials)
+        try:
+            service.events().delete(calendarId="primary", eventId=event_id).execute()
+        except HttpError as e:
+            if e.resp.status not in (404, 410):
+                raise
+
+    return await asyncio.get_event_loop().run_in_executor(None, _delete)
