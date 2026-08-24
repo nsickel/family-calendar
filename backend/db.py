@@ -16,6 +16,12 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+# Accept the plain `postgresql://` string Supabase's dashboard gives you
+# verbatim — we need the psycopg3 driver (the only one installed), not
+# SQLAlchemy's default psycopg2, so rewrite the scheme rather than making
+# everyone hand-edit the URL they copy-pasted.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgresql://"):]
 DB_SSLMODE = os.environ.get("DB_SSLMODE", "require")
 
 engine = create_engine(

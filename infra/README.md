@@ -57,7 +57,10 @@ image_tag              = "abc1234"   # a git short SHA that was pushed to Docker
 google_client_id       = "....apps.googleusercontent.com"
 google_client_secret   = "...."
 secret_key             = "...."      # random value signing session cookies, e.g. `openssl rand -hex 32`
-database_url           = "postgresql+psycopg://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres"
+database_url           = "postgresql://postgres.xxxx:PASSWORD@aws-0-region.pooler.supabase.com:5432/postgres"
+# ^ paste Supabase's Session Pooler string as-is — db.py rewrites the
+# `postgresql://` scheme to `postgresql+psycopg://` (the installed driver)
+# at startup, so no manual edit is needed.
 ```
 
 ### First deploy (two-step, because of the OAuth redirect URI)
