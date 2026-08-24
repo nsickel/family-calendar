@@ -2,15 +2,29 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import WeekGrid from "./components/WeekGrid";
 import WeekNav from "./components/WeekNav";
+import DayNav from "./components/DayNav";
+import LayoutToggle from "./components/LayoutToggle";
 import AddEventModal from "./components/AddEventModal";
 import TaskEditorModal from "./components/TaskEditorModal";
 import MemberBadge from "./components/MemberBadge";
 import LoginPage from "./components/LoginPage";
 import IconSidebar from "./components/IconSidebar";
 import TodosView from "./components/TodosView";
+import PersonDayView from "./components/PersonDayView";
+import TaskPersonDayView from "./components/TaskPersonDayView";
 import { setUnauthorizedHandler } from "./api";
 import { useWeekData } from "./hooks/useWeekData";
 import type { CalendarEvent, Task } from "./types";
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(dateStr: string, days: number) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 export default function App() {
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -19,8 +33,40 @@ export default function App() {
   }, []);
 
   const [view, setView] = useState<"calendar" | "todos">("calendar");
+  const [layoutMode, setLayoutMode] = useState<"week" | "day">("week");
+  const [selectedDate, setSelectedDate] = useState(() => todayStr());
 
   const { data, loading, error, monday, goNextWeek, goPrevWeek, goToday, refresh } = useWeekData();
+
+  const weekEnd = addDays(monday, 6);
+
+  // Keep the selected day inside whatever week is currently loaded (e.g. if
+  // the user navigates weeks via WeekNav while in day mode).
+  useEffect(() => {
+    if (selectedDate < monday || selectedDate > weekEnd) {
+      setSelectedDate(monday);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monday]);
+
+  const selectedDay = data?.days.find((d) => d.date === selectedDate);
+
+  const goPrevDay = () => {
+    const next = addDays(selectedDate, -1);
+    setSelectedDate(next);
+    if (next < monday) goPrevWeek();
+  };
+
+  const goNextDay = () => {
+    const next = addDays(selectedDate, 1);
+    setSelectedDate(next);
+    if (next > weekEnd) goNextWeek();
+  };
+
+  const goTodayDay = () => {
+    setSelectedDate(todayStr());
+    goToday();
+  };
 
   const [modalOpen, setModalOpen] = useState(false);
   const [prefillDate, setPrefillDate] = useState<string | undefined>();
@@ -61,9 +107,9 @@ export default function App() {
   };
 
   const handleFabClick = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    if (view === "calendar") openAdd(today);
-    else openAddTask(today);
+    const date = layoutMode === "day" ? selectedDate : todayStr();
+    if (view === "calendar") openAdd(date);
+    else openAddTask(date);
   };
 
   return (
@@ -72,14 +118,30 @@ export default function App() {
 
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
-        <WeekNav
-          monday={monday}
-          loading={loading}
-          onPrev={goPrevWeek}
-          onNext={goNextWeek}
-          onToday={goToday}
-          onRefresh={refresh}
-        />
+        <div className="flex items-center gap-3 mb-0">
+          <div className="flex-1 min-w-0">
+            {layoutMode === "week" ? (
+              <WeekNav
+                monday={monday}
+                loading={loading}
+                onPrev={goPrevWeek}
+                onNext={goNextWeek}
+                onToday={goToday}
+                onRefresh={refresh}
+              />
+            ) : (
+              <DayNav
+                date={selectedDate}
+                loading={loading}
+                onPrev={goPrevDay}
+                onNext={goNextDay}
+                onToday={goTodayDay}
+                onRefresh={refresh}
+              />
+            )}
+          </div>
+          <LayoutToggle mode={layoutMode} onChange={setLayoutMode} />
+        </div>
 
         {/* Member legend */}
         {data && (
@@ -123,9 +185,9 @@ export default function App() {
           )}
 
           <AnimatePresence mode="wait">
-            {data && (
+            {data && (layoutMode === "week" || selectedDay) && (
               <motion.div
-                key={`${view}-${monday}`}
+                key={`${view}-${layoutMode}-${layoutMode === "week" ? monday : selectedDate}`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -133,9 +195,25 @@ export default function App() {
                 className="h-full"
               >
                 {view === "calendar" ? (
-                  <WeekGrid data={data} onAddEvent={openAdd} onEditEvent={openEdit} />
-                ) : (
+                  layoutMode === "week" ? (
+                    <WeekGrid data={data} onAddEvent={openAdd} onEditEvent={openEdit} />
+                  ) : (
+                    <PersonDayView
+                      day={selectedDay!}
+                      members={data.members}
+                      onAddEvent={openAdd}
+                      onEditEvent={openEdit}
+                    />
+                  )
+                ) : layoutMode === "week" ? (
                   <TodosView data={data} onAddTask={openAddTask} onEditTask={openEditTask} />
+                ) : (
+                  <TaskPersonDayView
+                    day={selectedDay!}
+                    members={data.members}
+                    onAddTask={openAddTask}
+                    onEditTask={openEditTask}
+                  />
                 )}
               </motion.div>
             )}
