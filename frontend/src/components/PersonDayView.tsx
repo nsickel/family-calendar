@@ -20,7 +20,7 @@ export default function PersonDayView({ day, members, onAddEvent, onEditEvent }:
           {day.events
             .filter((ev) => ev.account_id === member.id)
             .map((ev) => (
-              <EventPill key={ev.id} event={ev} onClick={onEditEvent} />
+              <EventPill key={ev.id} event={ev} onClick={onEditEvent} size="lg" />
             ))}
         </MemberColumn>
       ))}

@@ -27,7 +27,7 @@ export default function TaskPersonDayView({ day, members, onAddTask, onEditTask 
           {tasks
             .filter((t) => t.assignees.some((a) => a.id === member.id))
             .map((t) => (
-              <TaskItem key={t.id} task={t} onCompleted={removeTask} onEdit={onEditTask} />
+              <TaskItem key={t.id} task={t} onCompleted={removeTask} onEdit={onEditTask} size="lg" />
             ))}
         </MemberColumn>
       ))}

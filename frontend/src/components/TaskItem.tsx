@@ -8,9 +8,11 @@ interface Props {
   task: Task;
   onCompleted: (taskId: string) => void;
   onEdit: (task: Task) => void;
+  size?: "sm" | "lg";
 }
 
-export default function TaskItem({ task, onCompleted, onEdit }: Props) {
+export default function TaskItem({ task, onCompleted, onEdit, size = "sm" }: Props) {
+  const isLg = size === "lg";
   const [done, setDone] = useState(false);
   const { fire } = useConfetti();
   const accentColor = task.assignees[0]?.color ?? "#6b7280";
@@ -33,13 +35,20 @@ export default function TaskItem({ task, onCompleted, onEdit }: Props) {
         <motion.div
           exit={{ opacity: 0, x: 40, scale: 0.8 }}
           transition={{ duration: 0.3 }}
-          className="flex items-center gap-2 p-1.5 rounded-lg min-h-[44px]"
+          className={`flex items-center rounded-lg ${
+            isLg ? "gap-2.5 p-2.5 mb-2 min-h-[56px]" : "gap-2 p-1.5 min-h-[44px]"
+          }`}
+          style={
+            isLg
+              ? { background: accentColor + "33", borderLeft: `6px solid ${accentColor}` }
+              : undefined
+          }
         >
           <input
             type="checkbox"
             checked={false}
             onChange={handleCheck}
-            className="w-5 h-5 rounded cursor-pointer flex-shrink-0"
+            className={`${isLg ? "w-6 h-6" : "w-5 h-5"} rounded cursor-pointer flex-shrink-0`}
             style={{ accentColor }}
           />
           <button
@@ -52,12 +61,12 @@ export default function TaskItem({ task, onCompleted, onEdit }: Props) {
           >
             <span className="flex -space-x-1">
               {task.assignees.map((a) => (
-                <span key={a.id} title={a.name} className="text-sm leading-none">
+                <span key={a.id} title={a.name} className={`${isLg ? "text-base" : "text-sm"} leading-none`}>
                   {a.emoji}
                 </span>
               ))}
             </span>
-            <span className="text-sm font-bold text-gray-700 leading-tight">{task.title}</span>
+            <span className={`${isLg ? "text-base" : "text-sm"} font-bold text-gray-700 leading-tight`}>{task.title}</span>
           </button>
         </motion.div>
       )}
