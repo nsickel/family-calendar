@@ -6,6 +6,11 @@ export interface Member {
   connected: boolean;
 }
 
+export interface SettingsMember extends Member {
+  slug: string;
+  sort_order: number;
+}
+
 export interface CalendarEvent {
   id: string;
   calendar_id: string;

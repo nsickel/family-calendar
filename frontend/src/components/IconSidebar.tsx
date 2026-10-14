@@ -1,8 +1,10 @@
-import { CalendarDays, ListTodo } from "lucide-react";
+import { CalendarDays, ListTodo, Settings } from "lucide-react";
+
+export type View = "calendar" | "todos" | "settings";
 
 interface Props {
-  view: "calendar" | "todos";
-  onChange: (view: "calendar" | "todos") => void;
+  view: View;
+  onChange: (view: View) => void;
 }
 
 export default function IconSidebar({ view, onChange }: Props) {
@@ -20,6 +22,10 @@ export default function IconSidebar({ view, onChange }: Props) {
       <button onClick={() => onChange("todos")} className={itemClass(view === "todos")}>
         <ListTodo size={26} strokeWidth={2.5} />
         <span className="text-[10px] uppercase tracking-wider">To-Do</span>
+      </button>
+      <button onClick={() => onChange("settings")} className={itemClass(view === "settings")}>
+        <Settings size={26} strokeWidth={2.5} />
+        <span className="text-[10px] uppercase tracking-wider">Setup</span>
       </button>
     </div>
   );
