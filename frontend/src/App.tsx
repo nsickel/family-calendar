@@ -9,12 +9,20 @@ import TaskEditorModal from "./components/TaskEditorModal";
 import MemberBadge from "./components/MemberBadge";
 import LoginPage from "./components/LoginPage";
 import IconSidebar from "./components/IconSidebar";
+import type { View } from "./components/IconSidebar";
 import TodosView from "./components/TodosView";
 import PersonDayView from "./components/PersonDayView";
 import TaskPersonDayView from "./components/TaskPersonDayView";
+import SettingsView from "./components/SettingsView";
 import { setUnauthorizedHandler } from "./api";
 import { useWeekData } from "./hooks/useWeekData";
+import { useMembers } from "./hooks/useMembers";
 import type { CalendarEvent, Task } from "./types";
+
+function initialView(): View {
+  const v = new URLSearchParams(window.location.search).get("view");
+  return v === "settings" ? "settings" : "calendar";
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -32,11 +40,23 @@ export default function App() {
     setUnauthorizedHandler(() => setNeedsLogin(true));
   }, []);
 
-  const [view, setView] = useState<"calendar" | "todos">("calendar");
+  const [view, setView] = useState<View>(initialView);
   const [layoutMode, setLayoutMode] = useState<"week" | "day">("week");
   const [selectedDate, setSelectedDate] = useState(() => todayStr());
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("view")) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
   const { data, loading, error, monday, goNextWeek, goPrevWeek, goToday, refresh } = useWeekData();
+
+  const members = useMembers();
+  useEffect(() => {
+    if (view === "settings") members.load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   const weekEnd = addDays(monday, 6);
 
@@ -107,6 +127,7 @@ export default function App() {
   };
 
   const handleFabClick = () => {
+    if (view === "settings") return;
     const date = layoutMode === "day" ? selectedDate : todayStr();
     if (view === "calendar") openAdd(date);
     else openAddTask(date);
@@ -117,110 +138,117 @@ export default function App() {
       <IconSidebar view={view} onChange={setView} />
 
       <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-0">
-          <div className="flex-1 min-w-0">
-            {layoutMode === "week" ? (
-              <WeekNav
-                monday={monday}
-                loading={loading}
-                onPrev={goPrevWeek}
-                onNext={goNextWeek}
-                onToday={goToday}
-                onRefresh={refresh}
-              />
-            ) : (
-              <DayNav
-                date={selectedDate}
-                loading={loading}
-                onPrev={goPrevDay}
-                onNext={goNextDay}
-                onToday={goTodayDay}
-                onRefresh={refresh}
-              />
-            )}
-          </div>
-          <LayoutToggle mode={layoutMode} onChange={setLayoutMode} />
-        </div>
-
-        {/* Member legend */}
-        {data && (
-          <div className="flex gap-2 flex-wrap mb-3 px-1">
-            {data.members
-              .filter((m) => m.connected)
-              .map((m) => (
-                <MemberBadge key={m.id} member={m} size="sm" />
-              ))}
-          </div>
-        )}
-
-        {/* Main grid */}
-        <div className="flex-1 min-h-0">
-          {error && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <p className="text-4xl mb-2">😬</p>
-                <p className="font-bold text-gray-500">Couldn't load calendar</p>
-                <p className="text-sm text-gray-400 mb-4">{error}</p>
-                <button
-                  onClick={refresh}
-                  className="px-6 py-3 bg-indigo-500 text-white font-black rounded-xl active:bg-indigo-600"
-                >
-                  Try again
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!error && !data && loading && (
-            <div className="flex items-center justify-center h-full">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                className="text-5xl"
-              >
-                🗓️
-              </motion.div>
-            </div>
-          )}
-
-          <AnimatePresence mode="wait">
-            {data && (layoutMode === "week" || selectedDay) && (
-              <motion.div
-                key={`${view}-${layoutMode}-${layoutMode === "week" ? monday : selectedDate}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="h-full"
-              >
-                {view === "calendar" ? (
-                  layoutMode === "week" ? (
-                    <WeekGrid data={data} onAddEvent={openAdd} onEditEvent={openEdit} />
-                  ) : (
-                    <PersonDayView
-                      day={selectedDay!}
-                      members={data.members}
-                      onAddEvent={openAdd}
-                      onEditEvent={openEdit}
-                    />
-                  )
-                ) : layoutMode === "week" ? (
-                  <TodosView data={data} onAddTask={openAddTask} onEditTask={openEditTask} />
+        {view === "settings" ? (
+          <SettingsView members={members.data} loading={members.loading} error={members.error} />
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-0">
+              <div className="flex-1 min-w-0">
+                {layoutMode === "week" ? (
+                  <WeekNav
+                    monday={monday}
+                    loading={loading}
+                    onPrev={goPrevWeek}
+                    onNext={goNextWeek}
+                    onToday={goToday}
+                    onRefresh={refresh}
+                  />
                 ) : (
-                  <TaskPersonDayView
-                    day={selectedDay!}
-                    members={data.members}
-                    onAddTask={openAddTask}
-                    onEditTask={openEditTask}
+                  <DayNav
+                    date={selectedDate}
+                    loading={loading}
+                    onPrev={goPrevDay}
+                    onNext={goNextDay}
+                    onToday={goTodayDay}
+                    onRefresh={refresh}
                   />
                 )}
-              </motion.div>
+              </div>
+              <LayoutToggle mode={layoutMode} onChange={setLayoutMode} />
+            </div>
+
+            {/* Member legend */}
+            {data && (
+              <div className="flex gap-2 flex-wrap mb-3 px-1">
+                {data.members
+                  .filter((m) => m.connected)
+                  .map((m) => (
+                    <MemberBadge key={m.id} member={m} size="sm" />
+                  ))}
+              </div>
             )}
-          </AnimatePresence>
-        </div>
+
+            {/* Main grid */}
+            <div className="flex-1 min-h-0">
+              {error && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <p className="text-4xl mb-2">😬</p>
+                    <p className="font-bold text-gray-500">Couldn't load calendar</p>
+                    <p className="text-sm text-gray-400 mb-4">{error}</p>
+                    <button
+                      onClick={refresh}
+                      className="px-6 py-3 bg-indigo-500 text-white font-black rounded-xl active:bg-indigo-600"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!error && !data && loading && (
+                <div className="flex items-center justify-center h-full">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    className="text-5xl"
+                  >
+                    🗓️
+                  </motion.div>
+                </div>
+              )}
+
+              <AnimatePresence mode="wait">
+                {data && (layoutMode === "week" || selectedDay) && (
+                  <motion.div
+                    key={`${view}-${layoutMode}-${layoutMode === "week" ? monday : selectedDate}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="h-full"
+                  >
+                    {view === "calendar" ? (
+                      layoutMode === "week" ? (
+                        <WeekGrid data={data} onAddEvent={openAdd} onEditEvent={openEdit} />
+                      ) : (
+                        <PersonDayView
+                          day={selectedDay!}
+                          members={data.members}
+                          onAddEvent={openAdd}
+                          onEditEvent={openEdit}
+                        />
+                      )
+                    ) : layoutMode === "week" ? (
+                      <TodosView data={data} onAddTask={openAddTask} onEditTask={openEditTask} />
+                    ) : (
+                      <TaskPersonDayView
+                        day={selectedDay!}
+                        members={data.members}
+                        onAddTask={openAddTask}
+                        onEditTask={openEditTask}
+                      />
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </>
+        )}
 
         {/* Floating add button */}
+        {view !== "settings" && (
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={handleFabClick}
@@ -228,6 +256,7 @@ export default function App() {
         >
           +
         </motion.button>
+        )}
 
         {/* Add/Edit Modal */}
         <AddEventModal

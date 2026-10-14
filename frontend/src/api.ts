@@ -1,4 +1,4 @@
-import type { WeekData, NewEventPayload, NewTaskPayload } from "./types";
+import type { WeekData, NewEventPayload, NewTaskPayload, SettingsMember } from "./types";
 
 const BASE = "";
 
@@ -21,6 +21,12 @@ export async function fetchWeek(date?: string): Promise<WeekData> {
   const url = date ? `/api/week?date=${date}` : "/api/week";
   const res = await apiFetch(BASE + url);
   if (!res.ok) throw new Error(`Failed to fetch week: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMembers(): Promise<SettingsMember[]> {
+  const res = await apiFetch(BASE + "/api/members");
+  if (!res.ok) throw new Error(`Failed to fetch members: ${res.status}`);
   return res.json();
 }
 
